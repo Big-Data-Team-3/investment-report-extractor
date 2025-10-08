@@ -58,6 +58,7 @@ data/*
 models/*
 !models/.gitkeep
 !models/README.md
+notebooks/guidance_learning/*
 
 experiments/*
 !experiments/.gitkeep

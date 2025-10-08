@@ -6,13 +6,16 @@ readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
     "beautifulsoup4>=4.14.2",
+    "datasets>=4.1.1",
     "guidance>=0.3.0",
     "ipykernel>=6.30.1",
     "jupyter>=1.1.1",
     "jupyterlab>=4.4.9",
     "lxml>=6.0.2",
+    "openai>=2.2.0",
     "pandas>=2.3.3",
     "playwright>=1.55.0",
+    "python-dotenv>=1.1.1",
     "requests>=2.32.5",
     "torch>=2.8.0",
     "transformers>=4.57.0",
