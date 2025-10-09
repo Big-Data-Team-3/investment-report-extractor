@@ -192,31 +192,201 @@ async def score_relevance(next_links:dict,intent_understanding:dict):
     """
     pass
 
-async def run_scraper(seed_url:str,intent:str):
+async def refine_intent_for_links(
+    next_links: List[dict],
+    intent_understanding: dict,
+    current_page_context: dict,
+    root_intent: str,
+    parent_context: dict = None
+) -> List[dict]:
+    """
+    Refine intent for each next link based on context and navigation goals
+    
+    Args:
+        next_links: Prioritized list of links from prioritize_links()
+        intent_understanding: Intent understanding from _intent_understanding()
+        current_page_context: Info about current page (url, title, page_type, etc.)
+        root_intent: Original user intent (never changes)
+        parent_context: Context from parent page (how we got here)
+    
+    Returns:
+        List of link objects with 'refined_intent' field added to each
+    """
+    
+    from _guidance import load_model
+    from guidance import system, user, assistant, gen
+    
+    if not next_links:
+        return []
+    
+    lm = load_model()
+    refined_links = []
+    
+    # Get context info
+    expanded_intent = intent_understanding.get('expanded_intent', root_intent)
+    target_types = intent_understanding.get('target_content_types', [])
+    current_url = current_page_context.get('url', '')
+    current_title = current_page_context.get('title', '')
+    page_type = current_page_context.get('page_type', 'unknown')
+    
+    # Build context summary
+    context_summary = f"""
+Current Page: {current_title} ({current_url})
+Page Type: {page_type}
+Root Goal: {root_intent}
+Current Objective: {expanded_intent}
+Looking For: {', '.join(target_types)}
+"""
+    
+    if parent_context:
+        context_summary += f"\nNavigation Path: {parent_context.get('navigation_path', 'N/A')}"
+    
+    # Process each link individually (limit to top 10 to save API calls)
+    for link in next_links[:10]:
+        link_url = link.get('url', '')
+        link_text = link.get('text', '')
+        link_category = link.get('category', 'internal')
+        priority_score = link.get('final_priority', 0)
+        
+        # Generate refined intent for this specific link
+        with system():
+            lm += """You are a web scraping navigation expert. Given a root goal and current context, 
+generate a specific, actionable sub-intent for visiting a particular link. 
+The sub-intent should be concise (1-2 sentences) and describe what to look for on that page."""
+        
+        with user():
+            lm += f"""{context_summary}
+
+Now I'm considering following this link:
+- Link Text: "{link_text}"
+- URL: {link_url}
+- Category: {link_category}
+- Priority Score: {priority_score:.2f}
+
+Given the root goal and current context, what should my specific intent be when visiting this page?
+Respond with a clear, actionable sub-intent (1-2 sentences):"""
+        
+        with assistant():
+            lm += gen(name='sub_intent', max_tokens=100)
+        
+        refined_intent = lm['sub_intent'].strip()
+        
+        # Add refined intent to link object
+        refined_links.append({
+            **link,
+            'refined_intent': refined_intent,
+            'root_intent': root_intent,
+            'context': {
+                'from_page': current_url,
+                'from_title': current_title,
+                'depth': parent_context.get('depth', 0) + 1 if parent_context else 1,
+            }
+        })
+        
+        # Small delay to avoid rate limits
+        import asyncio
+        await asyncio.sleep(0.1)
+    
+    # Add remaining links without LLM refinement (use heuristic)
+    for link in next_links[10:]:
+        refined_links.append({
+            **link,
+            'refined_intent': _generate_heuristic_intent(link, intent_understanding, root_intent),
+            'root_intent': root_intent,
+            'context': {
+                'from_page': current_url,
+                'from_title': current_title,
+                'depth': parent_context.get('depth', 0) + 1 if parent_context else 1,
+            }
+        })
+    
+    return refined_links
+
+
+def _generate_heuristic_intent(link: dict, intent_understanding: dict, root_intent: str) -> str:
+    """
+    Generate a sub-intent using heuristics (for links beyond top 10)
+    """
+    link_text = link.get('text', '').lower()
+    link_url = link.get('url', '').lower()
+    target_types = intent_understanding.get('target_content_types', [])
+    
+    # Pattern-based intent generation
+    if 'documents' in target_types:
+        if any(word in link_text + link_url for word in ['investor', 'annual', 'report', 'filing']):
+            return f"Navigate to find and download financial documents related to: {root_intent}"
+        elif any(word in link_text + link_url for word in ['sec', '10-k', '10-q']):
+            return f"Access SEC filings to find required documents for: {root_intent}"
+    
+    if 'tables' in target_types:
+        if any(word in link_text + link_url for word in ['data', 'financial', 'metric', 'stat']):
+            return f"Find and extract financial data tables for: {root_intent}"
+    
+    # Generic fallback
+    return f"Explore '{link_text}' to find content relevant to: {root_intent}"
+
+
+def _classify_page_type(parsed_content: dict) -> str:
+    """
+    Classify what type of page this is based on content
+    """
+    title = parsed_content.get('title', '').lower()
+    headings = [h.get('text', '').lower() for h in parsed_content.get('structure', {}).get('headings', [])]
+    all_text = ' '.join([title] + headings)
+    
+    # Check for page type patterns
+    if any(word in all_text for word in ['investor relations', 'shareholder', 'sec filing']):
+        return 'investor_relations'
+    elif any(word in all_text for word in ['annual report', '10-k', '10-q', 'financial statement']):
+        return 'financial_documents'
+    elif parsed_content.get('documents') and len(parsed_content['documents']) > 5:
+        return 'document_library'
+    elif parsed_content.get('tables') and len(parsed_content['tables']) > 3:
+        return 'data_page'
+    elif len(parsed_content.get('links', {}).get('internal', [])) > 20:
+        return 'navigation_hub'
+    else:
+        return 'content_page'
+
+async def run_scraper(seed_url:str,root_intent:str):
     """Main async function that orchestrates the scraping"""
     try:
         # scrape the website
         content = await scrape_website(seed_url)
+        print("...")
         # Layer 1:parse the content and understand the intent
-        parsed_content = parse_raw_content(content,seed_url,intent)
+        parsed_content = parse_raw_content(content,seed_url,root_intent)
         # intent understanding
-        intent_understanding = _intent_understanding(parsed_content,intent)
+        intent_understanding = _intent_understanding(parsed_content,root_intent)
         # Layer 2: Intent-Based Filtering
         filtered_content = await filter_by_intent(parsed_content,intent_understanding, mode="ai")
         # Layer 3: Link Prioritization
         next_links = await prioritize_links(filtered_content,intent_understanding)
-        # Layer 4: Confidence Scoring
-        confidence_scores = await score_relevance(next_links,intent_understanding)
-        composed_object = {
-            "parsed_content": parsed_content,
-            "filtered_content": filtered_content,
-            "next_links": next_links,
-            "confidence_scores": confidence_scores,
-        }
+        # Layer 4: Refine Intent for each next link
+        refined_links = await refine_intent_for_links(
+            next_links,
+            intent_understanding,
+            current_page_context={
+                "url": seed_url,
+                "title": parsed_content.get('title', ''),
+                "page_type": _classify_page_type(parsed_content),
+                "found_documents": filtered_content.get('documents', []),
+            },
+            root_intent=root_intent,
+            parent_context=None
+        )
+        # Now each link has a refined_intent!
+        for link in refined_links[:3]:
+            print(f"Link: {link['text']}")
+            print(f"  Refined Intent: {link['refined_intent']}")
         print("--------")
         print(f"Found {len(next_links)} links to follow")
         print("--------")
-        return composed_object
+        return {
+            "parsed_content": parsed_content,
+            "filtered_content": filtered_content,
+            "next_links": refined_links,  # With refined intents!
+        }
     except Exception as e:
         print(f"Error: {e}")
         return None
@@ -795,10 +965,10 @@ def _is_navigation_link(tag) -> bool:
 
 if __name__ == "__main__":
     seed_url = "https://www.cnbc.com/dow-30/"
-    intent = "Our ultimate goal is to extract financial documents for each company from their respective IR(Investor Relations) pages. But we will start to go to such a page only from a seed URL in CNBC DOW30 index provide just now. We need to traverse smartly and click on relevant links to get to the specific company's IR page. After reaching that IR page, we need to look for any document link or presentation, transcript, press release within the IR page. Your role for now is to smartly scrape the websites from the Seed URL and provide relevant link directions to go to the next link in order to reach our ultimate goal, by leading ourselves to the IR page of each company in the DOW30 index from the seed URL (current)."
+    root_intent = "Our ultimate goal is to extract financial documents for each company from their respective IR(Investor Relations) pages. But we will start to go to such a page only from a seed URL in CNBC DOW30 index provide just now. We need to traverse smartly and click on relevant links to get to the specific company's IR page. After reaching that IR page, we need to look for any document link or presentation, transcript, press release within the IR page. Your role for now is to smartly scrape the websites from the Seed URL and provide relevant link directions to go to the next link in order to reach our ultimate goal, by leading ourselves to the IR page of each company in the DOW30 index from the seed URL (current)."
     print("Starting the scraper...")
     start_time = time.time()
-    asyncio.run(run_scraper(seed_url,intent))
+    asyncio.run(run_scraper(seed_url,root_intent))
     end_time = time.time()
     print(f"Scraper completed in {end_time - start_time} seconds")
 # endregion
