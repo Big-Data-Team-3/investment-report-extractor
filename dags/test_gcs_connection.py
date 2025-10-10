@@ -78,38 +78,15 @@ upload_to_gcs = LocalFilesystemToGCSOperator(
 )
 
 # Task 3: List objects in bucket
-def list_gcs_objects(**context):
-    hook = GCSHook(gcp_conn_id='google_cloud_default')
-    
-    # List objects
-    objects = hook.list(
-        bucket_name='investment-docs-7245-03',
-        prefix='test/'
-    )
-    
-    print(f"Found {len(objects)} objects:")
-    for obj in objects:
-        print(f"  - {obj}")
-    
-    return objects
-
-list_objects = PythonOperator(
+list_objects = GCSListObjectsOperator(
     task_id='list_gcs_objects',
-    python_callable=list_gcs_objects,
+    bucket='investment-docs-7245-03',
+    prefix='test/',
+    gcp_conn_id='google_cloud_default',
+    dag=dag,
 )
 
-# Task 4: Process objects
-def process_gcs_objects(**context):
-    # Pull the list from XCom
-    objects = context['ti'].xcom_pull(task_ids='list_gcs_objects')
-    print(f"Found {len(objects)} objects: {objects}")
-
-process_task = PythonOperator(
-    task_id='process_objects',
-    python_callable=process_gcs_objects,
-)
-
-# Task 5: Download the file back from GCS
+# Task 4: Download the file back from GCS
 def download_from_gcs():
     os.makedirs('/tmp/airflow_test', exist_ok=True)
     hook = GCSHook(
@@ -122,28 +99,27 @@ def download_from_gcs():
     )
     return '/tmp/airflow_test/downloaded_test_data.json'
 
-# Task 6: Download the file back from GCS
 download_from_gcs = PythonOperator(
     task_id='download_from_gcs',
     python_callable=download_from_gcs,
     dag=dag,
 )
 
-# Task 7: Verify the downloaded content
+# Task 5: Verify the downloaded content
 verify_task = BashOperator(
     task_id='verify_downloaded_content',
     bash_command='cat /tmp/airflow_test/downloaded_test_data.json && echo "\\nDownload verification successful!"',
     dag=dag,
 )
 
-# Task 8: Cleanup test files
+# Task 6: Cleanup test files
 cleanup_local = BashOperator(
     task_id='cleanup_local_files',
     bash_command='rm -rf /tmp/airflow_test && echo "Local cleanup completed"',
     dag=dag,
 )
 
-# Task 9: Cleanup GCS test files
+# Task 7: Cleanup GCS test files
 cleanup_gcs = GCSDeleteObjectsOperator(
     task_id='cleanup_gcs_files',
     bucket_name='investment-docs-7245-03',
@@ -152,6 +128,5 @@ cleanup_gcs = GCSDeleteObjectsOperator(
     dag=dag,
 )
 
-
 # Define task dependencies
-create_data_task >> upload_to_gcs >> list_objects >> process_task >> download_from_gcs >> verify_task >> [cleanup_local, cleanup_gcs]
+create_data_task >> upload_to_gcs >> list_objects >> download_from_gcs >> verify_task >> [cleanup_local, cleanup_gcs]

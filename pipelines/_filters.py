@@ -71,7 +71,7 @@ def filter_exact_mode(parsed_content: dict, intent_understanding: dict) -> dict:
 
 async def filter_guidance_mode(parsed_content: dict, intent_understanding: dict) -> dict:
     """LLM-assisted filtering - removes irrelevant items from each section"""
-    from _guidance import load_model
+    from ._guidance import load_model
     
     keywords = intent_understanding.get('keywords', [])
     target_types = intent_understanding.get('target_content_types', [])
@@ -646,7 +646,7 @@ def filter_structure_exact(structure: dict, keywords: List[str]) -> dict:
 async def filter_documents_with_llm(documents: List[dict], intent: str, lm) -> List[dict]:
     """Use LLM to score document relevance"""
     if len(documents) > 20:
-        from scraper import _extract_keywords
+        from .scraper import _extract_keywords
         keywords = _extract_keywords(intent)
         documents = filter_documents_exact(documents, keywords)[:20]
     
