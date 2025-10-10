@@ -67,3 +67,4 @@ experiments/*
 # Airflow (if using local logs/output)
 airflow_logs/
 airflow/.airflowignore
+config/gcs-key.json
