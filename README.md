@@ -53,6 +53,8 @@ investment-report-extractor/
 
 ## 🏗️ Architecture
 
+![Investment Report Extractor Architecture](investment_report_extractor_architecture.png)
+
 ### System Components
 
 ### Data Flow
