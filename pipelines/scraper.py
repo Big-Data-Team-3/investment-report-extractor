@@ -6,18 +6,225 @@ from bs4 import BeautifulSoup
 from urllib.parse import urljoin, urlparse
 from typing import Dict, List, Optional
 import re
+import logging
 from _guidance import load_env
 from guidance import system, user, assistant, gen, select
 from guidance.models import OpenAI
 import time
+from ir_extractor_exact import filter_links_exact_enhanced
+
+# region Logging
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler('scraper.log'),
+        logging.StreamHandler()
+    ],
+    force=True
+)
+logger = logging.getLogger(__name__)
+logging.getLogger('httpx').setLevel(logging.ERROR)  # Only errors
+logging.getLogger('httpcore').setLevel(logging.ERROR)
+logging.getLogger('openai').setLevel(logging.WARNING)
+logging.getLogger('urllib3').setLevel(logging.WARNING)  # In case you use requests
+# endregion
+
 # region Public functions for external use
 # ------------ Public functions for external use ------------
+
+
+
+
+async def run_scraper(seed_url:str,root_intent:str,parent_context:dict=None, scraping_mode:str="exact"):
+    """Main async function that orchestrates the scraping"""
+    try:
+        logger.info(f"Running scraper in {scraping_mode} mode for {seed_url}")
+        
+        # scrape the website
+        content = await scrape_website(seed_url)
+        logger.debug(f"Scraped {len(content)} bytes from {seed_url}")
+        
+        # Layer 1: parse the content and understand the intent
+        parsed_content = parse_raw_content(content,seed_url,root_intent)
+        
+        # Layer 2: Intent understanding - skip LLM for exact mode
+        if scraping_mode == "exact":
+            intent_understanding = _create_rule_based_intent(root_intent)
+            logger.debug("Using rule-based intent understanding (no LLM)")
+        else:
+            intent_understanding = _intent_understanding(parsed_content,root_intent)
+            logger.debug("Using LLM-based intent understanding")
+        
+        # Layer 3: Intent-Based Filtering
+        filtered_content = await filter_by_intent(parsed_content,intent_understanding, scraping_mode)
+        
+        # Layer 4: Link Prioritization
+        next_links = await prioritize_links(filtered_content,intent_understanding)
+        
+        # Layer 5: Refine Intent for each next link - skip LLM for exact mode
+        if scraping_mode == "exact":
+            refined_links = _refine_intent_rule_based(next_links, intent_understanding, seed_url)
+            logger.debug("Using rule-based intent refinement (no LLM)")
+        else:
+            refined_links = await refine_intent_for_links(
+                next_links,
+                intent_understanding,
+                current_page_context={
+                    "url": seed_url,
+                    "title": parsed_content.get('title', ''),
+                    "page_type": _classify_page_type(parsed_content),
+                    "found_documents": filtered_content.get('documents', []),
+                },
+                root_intent=root_intent,
+                parent_context=parent_context
+            )
+            logger.debug("Using LLM-based intent refinement")
+        
+        # Now each link has a refined_intent!
+        logger.debug(f"Top 3 refined links:")
+        for link in refined_links[:3]:
+            logger.debug(f"  Link: {link['text']}")
+            logger.debug(f"    Refined Intent: {link['refined_intent']}")
+        logger.debug(f"Found {len(next_links)} links to follow")
+        return {
+            "parsed_content": parsed_content,
+            "filtered_content": filtered_content,
+            "next_links": refined_links,  # With refined intents!
+        }
+    except Exception as e:
+        logger.error(f"Error in run_scraper for {seed_url}: {e}")
+        return None
+
+# endregion
+
+# region Private Helper functions not for external use
+# ------------ Private Helper functions not for external use ------------
+
+def _create_rule_based_intent(root_intent: str) -> dict:
+    """
+    Create intent understanding using only rule-based analysis (no LLM).
+    This is used for exact/manual mode to avoid any LLM calls.
+    """
+    # Extract keywords using simple pattern matching
+    keywords = _extract_keywords_rule_based(root_intent)
+    
+    # Determine target content types based on keywords
+    target_types = _determine_target_types_rule_based(root_intent, keywords)
+    
+    # Create a simple expanded intent (just cleaned up version)
+    expanded_intent = root_intent.strip()
+    
+    return {
+        'original_intent': root_intent,
+        'expanded_intent': expanded_intent,
+        'keywords': keywords,
+        'target_content_types': target_types,
+        'filtering_steps': ['keyword_matching', 'pattern_matching'],
+        'relevance_criteria': 'keyword_presence',
+        'next_actions': ['follow_relevant_links', 'extract_documents'],
+    }
+
+
+def _extract_keywords_rule_based(intent: str) -> List[str]:
+    """Extract keywords from intent using rule-based patterns (no LLM)"""
+    # Common IR/financial keywords
+    ir_keywords = [
+        'investor', 'relations', 'financial', 'earnings', 'documents', 
+        'reports', 'sec', 'filing', '10-k', '10-q', '8-k', 'proxy',
+        'annual', 'quarterly', 'presentation', 'transcript'
+    ]
+    
+    # Extract keywords that appear in the intent
+    intent_lower = intent.lower()
+    found_keywords = []
+    
+    for keyword in ir_keywords:
+        if keyword in intent_lower:
+            found_keywords.append(keyword)
+    
+    # Add some common variations
+    if 'ir' in intent_lower or 'investor relations' in intent_lower:
+        found_keywords.extend(['investor', 'relations', 'ir'])
+    
+    if 'document' in intent_lower:
+        found_keywords.extend(['documents', 'files', 'pdf'])
+        
+    if 'financial' in intent_lower:
+        found_keywords.extend(['financial', 'finance', 'money'])
+    
+    # Remove duplicates and return
+    return list(set(found_keywords))
+
+
+def _determine_target_types_rule_based(intent: str, keywords: List[str]) -> List[str]:
+    """Determine what content types to focus on using rules (no LLM)"""
+    target_types = ['links']  # Always need links for navigation
+    
+    intent_lower = intent.lower()
+    
+    # Look for document-related terms
+    doc_terms = ['document', 'report', 'filing', 'pdf', 'presentation', 'transcript']
+    if any(term in intent_lower for term in doc_terms):
+        target_types.append('documents')
+    
+    # Look for table/data terms
+    table_terms = ['table', 'data', 'financial', 'numbers', 'metrics']
+    if any(term in intent_lower for term in table_terms):
+        target_types.append('tables')
+    
+    # Look for content terms
+    content_terms = ['information', 'content', 'text', 'details']
+    if any(term in intent_lower for term in content_terms):
+        target_types.append('content')
+    
+    return target_types
+
+
+def _refine_intent_rule_based(next_links: List[dict], intent_understanding: dict, current_url: str) -> List[dict]:
+    """
+    Refine intent for links using rule-based logic (no LLM).
+    This creates simple refined intents based on link patterns.
+    """
+    refined_links = []
+    base_intent = intent_understanding.get('original_intent', '')
+    keywords = intent_understanding.get('keywords', [])
+    
+    for link in next_links:
+        url = link.get('url', '').lower()
+        text = link.get('text', '').lower()
+        
+        # Create refined intent based on link characteristics
+        if any(pattern in url for pattern in ['investor', 'ir.', '/investors']):
+            refined_intent = f"Navigate to investor relations section to find financial documents and reports"
+        elif any(pattern in url for pattern in ['/earnings', '/financial', '/reports']):
+            refined_intent = f"Access financial reports and earnings information"
+        elif any(pattern in text for pattern in ['10-k', '10-q', '8-k', 'annual report']):
+            refined_intent = f"Download SEC filing or annual report document"
+        elif any(pattern in text for pattern in ['presentation', 'transcript']):
+            refined_intent = f"Access investor presentation or earnings call transcript"
+        elif 'pdf' in url or 'download' in url:
+            refined_intent = f"Download document file"
+        else:
+            # Generic refined intent
+            refined_intent = f"Explore link for investor relations content and financial documents"
+        
+        # Add the refined intent to the link
+        refined_link = {**link}
+        refined_link['refined_intent'] = refined_intent
+        refined_links.append(refined_link)
+    
+    return refined_links
+
 
 def parse_raw_content(content,base_url:str,intent:str):
     """
     Input raw html content and return a structured representation of the content
     Args:
         content: raw html content
+        base_url: base URL for resolving relative links
+        intent: user intent (not used in parsing but kept for compatibility)
     Returns:
         structured representation of the content, through a dictionary including:
         - title, metadata, text content, links, documents, images, structure
@@ -32,7 +239,7 @@ def parse_raw_content(content,base_url:str,intent:str):
     links = _extract_links(soup, base_url)
     documents = _extract_documents(soup, base_url)
     images = _extract_images(soup, base_url)
-    tables = _extract_tables(soup)
+    tables = _extract_tables(soup, base_url)
     return {
         'title': title,
         'metadata': metadata,
@@ -44,15 +251,45 @@ def parse_raw_content(content,base_url:str,intent:str):
         'tables': tables,
     }
 
-async def scrape_website(url: str, headless: bool = True, timeout: int = 30000):
-    """Scrape a website and return its HTML content"""
-    async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=headless)
-        page = await browser.new_page()
-        await page.goto(url, wait_until="networkidle", timeout=timeout)
-        content = await page.content()
-        await browser.close()
-        return content
+async def scrape_website(url: str, headless: bool = True, timeout: int = 60000, max_retries: int = 3):
+    """Scrape a website with anti-bot measures and retries"""
+    
+    for attempt in range(max_retries):
+        try:
+            async with async_playwright() as p:
+                browser = await p.chromium.launch(
+                    headless=headless,
+                    args=['--disable-blink-features=AutomationControlled']
+                )
+                
+                context = await browser.new_context(
+                    user_agent='Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                    viewport={'width': 1920, 'height': 1080},
+                )
+                
+                page = await context.new_page()
+                await page.add_init_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined});")
+                
+                # Use 'load' instead of 'networkidle'
+                await page.goto(url, wait_until="load", timeout=timeout)
+                await page.wait_for_timeout(1000)
+                
+                content = await page.content()
+                await browser.close()
+                
+                logger.debug(f"Successfully scraped {url} (attempt {attempt + 1})")
+                return content
+                
+        except Exception as e:
+            logger.warning(f"Scrape attempt {attempt + 1}/{max_retries} failed for {url}: {str(e)[:200]}")
+            
+            if attempt < max_retries - 1:
+                wait_time = 2 ** attempt
+                logger.info(f"Retrying in {wait_time} seconds...")
+                await asyncio.sleep(wait_time)
+    
+    logger.error(f"All {max_retries} attempts failed for {url}")
+    raise Exception(f"Failed to scrape {url} after {max_retries} attempts")
 
 async def filter_by_intent(parsed_content:dict,intent_understanding:dict, mode:str):
     """
@@ -81,7 +318,12 @@ async def filter_by_intent(parsed_content:dict,intent_understanding:dict, mode:s
     # Dispatch to appropriate filtering strategy from filters.py
     # These functions will filter items within each key
     if mode == "exact":
-        return filter_exact_mode(filtered, intent_understanding)
+        from _filters import _is_ir_related_intent, filter_exact_mode_enhanced_ir, filter_exact_mode
+        # Use enhanced exact mode for IR-related intents
+        if _is_ir_related_intent(intent_understanding):
+            return filter_exact_mode_enhanced_ir(filtered, intent_understanding)
+        else:
+            return filter_exact_mode(filtered, intent_understanding)
     elif mode == "guidance":
         return await filter_guidance_mode(filtered, intent_understanding)
     elif mode == "ai":
@@ -231,18 +473,18 @@ async def refine_intent_for_links(
     
     # Build context summary
     context_summary = f"""
-Current Page: {current_title} ({current_url})
-Page Type: {page_type}
-Root Goal: {root_intent}
-Current Objective: {expanded_intent}
-Looking For: {', '.join(target_types)}
-"""
+    Current Page: {current_title} ({current_url})
+    Page Type: {page_type}
+    Root Goal: {root_intent}
+    Current Objective: {expanded_intent}
+    Looking For: {', '.join(target_types)}
+    """
     
     if parent_context:
         context_summary += f"\nNavigation Path: {parent_context.get('navigation_path', 'N/A')}"
     
-    # Process each link individually (limit to top 10 to save API calls)
-    for link in next_links[:10]:
+    # Process each link individually (limit to top 5 to save API calls and reduce rate limits)
+    for link in next_links[:5]:
         link_url = link.get('url', '')
         link_text = link.get('text', '')
         link_category = link.get('category', 'internal')
@@ -251,20 +493,20 @@ Looking For: {', '.join(target_types)}
         # Generate refined intent for this specific link
         with system():
             lm += """You are a web scraping navigation expert. Given a root goal and current context, 
-generate a specific, actionable sub-intent for visiting a particular link. 
-The sub-intent should be concise (1-2 sentences) and describe what to look for on that page."""
+    generate a specific, actionable sub-intent for visiting a particular link. 
+    The sub-intent should be concise (1-2 sentences) and describe what to look for on that page."""
         
         with user():
             lm += f"""{context_summary}
 
-Now I'm considering following this link:
-- Link Text: "{link_text}"
-- URL: {link_url}
-- Category: {link_category}
-- Priority Score: {priority_score:.2f}
+    Now I'm considering following this link:
+    - Link Text: "{link_text}"
+    - URL: {link_url}
+    - Category: {link_category}
+    - Priority Score: {priority_score:.2f}
 
-Given the root goal and current context, what should my specific intent be when visiting this page?
-Respond with a clear, actionable sub-intent (1-2 sentences):"""
+    Given the root goal and current context, what should my specific intent be when visiting this page?
+    Respond with a clear, actionable sub-intent (1-2 sentences):"""
         
         with assistant():
             lm += gen(name='sub_intent', max_tokens=100)
@@ -283,12 +525,11 @@ Respond with a clear, actionable sub-intent (1-2 sentences):"""
             }
         })
         
-        # Small delay to avoid rate limits
-        import asyncio
-        await asyncio.sleep(0.1)
+        # Delay to avoid rate limits
+        await asyncio.sleep(0.5)
     
     # Add remaining links without LLM refinement (use heuristic)
-    for link in next_links[10:]:
+    for link in next_links[5:]:
         refined_links.append({
             **link,
             'refined_intent': _generate_heuristic_intent(link, intent_understanding, root_intent),
@@ -325,7 +566,6 @@ def _generate_heuristic_intent(link: dict, intent_understanding: dict, root_inte
     # Generic fallback
     return f"Explore '{link_text}' to find content relevant to: {root_intent}"
 
-
 def _classify_page_type(parsed_content: dict) -> str:
     """
     Classify what type of page this is based on content
@@ -348,53 +588,22 @@ def _classify_page_type(parsed_content: dict) -> str:
     else:
         return 'content_page'
 
-async def run_scraper(seed_url:str,root_intent:str):
-    """Main async function that orchestrates the scraping"""
-    try:
-        # scrape the website
-        content = await scrape_website(seed_url)
-        print("...")
-        # Layer 1:parse the content and understand the intent
-        parsed_content = parse_raw_content(content,seed_url,root_intent)
-        # intent understanding
-        intent_understanding = _intent_understanding(parsed_content,root_intent)
-        # Layer 2: Intent-Based Filtering
-        filtered_content = await filter_by_intent(parsed_content,intent_understanding, mode="ai")
-        # Layer 3: Link Prioritization
-        next_links = await prioritize_links(filtered_content,intent_understanding)
-        # Layer 4: Refine Intent for each next link
-        refined_links = await refine_intent_for_links(
-            next_links,
-            intent_understanding,
-            current_page_context={
-                "url": seed_url,
-                "title": parsed_content.get('title', ''),
-                "page_type": _classify_page_type(parsed_content),
-                "found_documents": filtered_content.get('documents', []),
-            },
-            root_intent=root_intent,
-            parent_context=None
-        )
-        # Now each link has a refined_intent!
-        for link in refined_links[:3]:
-            print(f"Link: {link['text']}")
-            print(f"  Refined Intent: {link['refined_intent']}")
-        print("--------")
-        print(f"Found {len(next_links)} links to follow")
-        print("--------")
-        return {
-            "parsed_content": parsed_content,
-            "filtered_content": filtered_content,
-            "next_links": refined_links,  # With refined intents!
-        }
-    except Exception as e:
-        print(f"Error: {e}")
-        return None
+def _is_ir_related_intent(intent_understanding: dict) -> bool:
+    """Check if intent is related to investor relations"""
+    keywords = intent_understanding.get('keywords', [])
+    ir_keywords = ['investor', 'relations', 'ir', 'financial', 'documents', 'earnings']
+    return any(kw.lower() in [k.lower() for k in keywords] for kw in ir_keywords)
 
-# endregion
-
-# region Private Helper functions not for external use
-# ------------ Private Helper functions not for external use ------------
+def filter_exact_mode_enhanced_ir(parsed_content: dict, intent_understanding: dict) -> dict:
+    """Enhanced exact mode specifically for IR-related content"""
+    # Use the enhanced link filtering
+    parsed_content['links'] = filter_links_exact_enhanced(
+        parsed_content.get('links', {}), 
+        intent_understanding
+    )
+    
+    # Use existing exact filtering for other content types
+    return filter_exact_mode(parsed_content, intent_understanding)
 
 def _intent_understanding(parsed_content:dict,intent:str):
     """
@@ -881,8 +1090,8 @@ def _extract_images(soup: BeautifulSoup, base_url: Optional[str] = None) -> List
     return images[:20]  # Limit to avoid too many images
 
 
-def _extract_tables(soup: BeautifulSoup) -> List[Dict]:
-    """Extract table data with header/body/footer differentiation"""
+def _extract_tables(soup: BeautifulSoup, base_url: str = None) -> List[Dict]:
+    """Extract table data with header/body/footer differentiation and embedded links"""
     tables = []
     
     for table in soup.find_all('table')[:5]:  # Limit tables
@@ -904,14 +1113,18 @@ def _extract_tables(soup: BeautifulSoup) -> List[Dict]:
                 else:
                     break  # Stop when we hit a row without th tags
         
-        # Extract body rows (from tbody or remaining tr tags)
+        # Extract body rows (from tbody or remaining tr tags) with links
         body = []
+        body_links = []  # Track links found in table body
         tbody = table.find('tbody')
         if tbody:
             for tr in tbody.find_all('tr'):
                 cells = [td.get_text(strip=True) for td in tr.find_all(['td', 'th'])]
                 if cells:
                     body.append(cells)
+                    # Extract links from this row
+                    row_links = _extract_table_row_links(tr, base_url)
+                    body_links.extend(row_links)
         else:
             # Get all rows that aren't in thead/tfoot and don't have th tags
             for tr in table.find_all('tr', recursive=False):
@@ -922,28 +1135,70 @@ def _extract_tables(soup: BeautifulSoup) -> List[Dict]:
                         cells = [cell.get_text(strip=True) for cell in tr.find_all(['td', 'th'])]
                         if cells and cells not in headers:
                             body.append(cells)
+                            # Extract links from this row
+                            row_links = _extract_table_row_links(tr, base_url)
+                            body_links.extend(row_links)
         
         # Extract footer rows (from tfoot)
         footer = []
         tfoot = table.find('tfoot')
         if tfoot:
             for tr in tfoot.find_all('tr'):
-                cells = [cell.get_text(strip=True) for cell in tr.find_all(['td', 'th'])]
+                cells = [td.get_text(strip=True) for td in tr.find_all(['td', 'th'])]
                 if cells:
                     footer.append(cells)
         
-        if headers or body or footer:
-            tables.append({
-                'headers': headers,
-                'body': body,
-                'footer': footer,
-                'header_count': len(headers),
-                'row_count': len(body),
-                'footer_count': len(footer),
-                'caption': table.find('caption').get_text(strip=True) if table.find('caption') else '',
-            })
+        tables.append({
+            'headers': headers,
+            'body': body,
+            'footer': footer,
+            'links': body_links,  # Add links found in table
+            'row_count': len(body),
+            'column_count': len(headers[0]) if headers else (len(body[0]) if body else 0),
+        })
     
     return tables
+
+
+def _extract_table_row_links(tr, base_url: str = None) -> List[Dict]:
+    """Extract links from a table row, specifically for DOW 30 company profiles"""
+    links = []
+    
+    for a in tr.find_all('a', href=True):
+        href = a['href'].strip()
+        text = a.get_text(strip=True)
+        
+        # Skip empty or anchor-only links
+        if not href or href.startswith('#') or href.startswith('javascript:'):
+            continue
+        
+        # Resolve relative URLs to absolute URLs
+        if base_url:
+            absolute_url = urljoin(base_url, href)
+        else:
+            absolute_url = href
+        
+        # Check if this looks like a company profile link (DOW 30 specific)
+        is_company_profile = (
+            '/quotes/' in absolute_url.lower() or 
+            '/symbol/' in absolute_url.lower() or 
+            'symbol' in absolute_url.lower()
+        )
+        
+        link_data = {
+            'url': absolute_url,
+            'text': text,
+            'title': a.get('title', ''),
+            'is_company_profile': is_company_profile
+        }
+        
+        links.append(link_data)
+        
+        # Log company profile links for debugging
+        if is_company_profile:
+            logger.info(f"Found company profile link in table: {text} -> {absolute_url}")
+    
+    return links
 
 
 def _is_navigation_link(tag) -> bool:
@@ -966,9 +1221,9 @@ def _is_navigation_link(tag) -> bool:
 if __name__ == "__main__":
     seed_url = "https://www.cnbc.com/dow-30/"
     root_intent = "Our ultimate goal is to extract financial documents for each company from their respective IR(Investor Relations) pages. But we will start to go to such a page only from a seed URL in CNBC DOW30 index provide just now. We need to traverse smartly and click on relevant links to get to the specific company's IR page. After reaching that IR page, we need to look for any document link or presentation, transcript, press release within the IR page. Your role for now is to smartly scrape the websites from the Seed URL and provide relevant link directions to go to the next link in order to reach our ultimate goal, by leading ourselves to the IR page of each company in the DOW30 index from the seed URL (current)."
-    print("Starting the scraper...")
+    logger.info("Starting the scraper...")
     start_time = time.time()
     asyncio.run(run_scraper(seed_url,root_intent))
     end_time = time.time()
-    print(f"Scraper completed in {end_time - start_time} seconds")
+    logger.info(f"Scraper completed in {end_time - start_time} seconds")
 # endregion
