@@ -17,10 +17,10 @@ from urllib.parse import urlparse, urlunparse, parse_qs, urlencode
 from datetime import datetime
 
 # Import from scraper module
-from scraper import run_scraper, _classify_page_type
-from _guidance import load_model
+from .scraper import run_scraper, _classify_page_type
+from ._guidance import load_model
 from guidance import system, user, assistant, gen
-from ir_extractor_exact import IRExtractorExact
+from .ir_extractor_exact import IRExtractorExact
 
 # region Logging
 # Configure logging
@@ -28,7 +28,6 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler('crawler.log'),
         logging.StreamHandler()
     ],
     force=True
@@ -565,7 +564,8 @@ async def process_url_from_queue(
 async def crawl_dow30_ir_pages(
     seed_url: str = "https://www.cnbc.com/dow-30/",
     config: CrawlerConfig = None,
-    debug: bool = True
+    debug: bool = True,
+    test: bool = False
 ) -> dict:
     """
     Specialized crawler for DOW 30 IR pages using the efficient ir_extractor_exact logic.
@@ -643,7 +643,8 @@ async def crawl_dow30_ir_pages(
         ir_extractor = IRExtractorExact()
         enriched_companies = await ir_extractor.extract_ir_pages_for_companies(
             companies, 
-            debug=debug
+            debug=debug,
+            test=test
         )
         
         logger.info(f"✓ Successfully processed {len(enriched_companies)} companies")

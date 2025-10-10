@@ -623,7 +623,7 @@ pyyaml==6.0.3
     #   jupyter-events
     #   transformers
     #   uvicorn
-pyyaml-ft==8.0.0
+# pyyaml-ft==8.0.0
     # via libcst
 pyzmq==27.1.0
     # via
@@ -702,7 +702,7 @@ sniffio==1.3.1
     #   openai
 soupsieve==2.8
     # via beautifulsoup4
-sqlalchemy==2.0.43
+sqlalchemy>=1.4.0,<=2.0.0
     # via
     #   alembic
     #   apache-airflow-core
@@ -872,3 +872,6 @@ yfinance==0.2.66
     # via investment-report-extractor
 zipp==3.23.0
     # via importlib-metadata
+# Additional requirements
+selenium>=4.15.0
+webdriver-manager>=4.0.0

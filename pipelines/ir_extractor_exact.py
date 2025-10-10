@@ -470,7 +470,8 @@ class IRExtractorExact:
         return result
 
     async def extract_ir_pages_for_companies(self, companies: List[Dict], 
-                                           debug: bool = True) -> List[Dict]:
+                                           debug: bool = True,
+                                           test: bool = False) -> List[Dict]:
         """Extract IR pages for a list of companies"""
         updated_companies = []
         

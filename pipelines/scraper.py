@@ -1,17 +1,17 @@
 import asyncio
 from playwright.async_api import async_playwright
 import multiprocessing as mp
-from _filters import filter_exact_mode, filter_guidance_mode, filter_ai_mode
+from ._filters import filter_exact_mode, filter_guidance_mode, filter_ai_mode
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin, urlparse
 from typing import Dict, List, Optional
 import re
 import logging
-from _guidance import load_env
+from ._guidance import load_env
 from guidance import system, user, assistant, gen, select
 from guidance.models import OpenAI
 import time
-from ir_extractor_exact import filter_links_exact_enhanced
+from .ir_extractor_exact import filter_links_exact_enhanced
 
 # region Logging
 # Configure logging
@@ -19,7 +19,6 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler('scraper.log'),
         logging.StreamHandler()
     ],
     force=True
@@ -455,7 +454,7 @@ async def refine_intent_for_links(
         List of link objects with 'refined_intent' field added to each
     """
     
-    from _guidance import load_model
+    from ._guidance import load_model
     from guidance import system, user, assistant, gen
     
     if not next_links:
