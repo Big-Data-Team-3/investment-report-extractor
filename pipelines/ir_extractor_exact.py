@@ -17,41 +17,67 @@ class IRExtractorExact:
     """Fast, rule-based IR page extractor based on notebook logic"""
     
     def __init__(self):
-        # Company-specific IR patterns (from notebook)
-        self.company_specific_patterns = {
-            'amazon': 'https://ir.aboutamazon.com',
-            '3m': 'https://investors.3m.com',
-            'chevron': 'https://www.chevron.com/investors',
-            'caterpillar': 'https://www.caterpillar.com/en/investors.html',
-            'salesforce': 'https://investor.salesforce.com',
-            'pg.com': 'https://www.pginvestor.com',
-            'proctergamble': 'https://www.pginvestor.com',
-            'visa': 'https://investor.visa.com',
-            'verizon': 'https://www.verizon.com/about/investors',
-            'honeywell': 'https://investor.honeywell.com'
-        }
-        
-        # IR-related keywords for scoring
+        # Expanded IR-related URL patterns for scoring (removed hardcoded company-specific patterns)
         self.ir_url_patterns = {
+            # Subdomain patterns (highest priority)
             'investor.': 50,
             'investors.': 50,
             'ir.': 50,
-            '/investor': 40,
-            '/investors': 40,
+            'investorrelations.': 50,
+            'shareholder.': 45,
+            
+            # Path patterns (medium-high priority)
             '/investor-relations': 45,
             '/investorrelations': 45,
+            '/investor': 40,
+            '/investors': 40,
+            '/about/investors': 40,
+            '/en/investors': 40,
             '/shareholder': 35,
             '/ir': 30,
+            '/financial': 25,
+            '/sec-filings': 25,
+            
+            # File extensions (medium priority)
+            '/investors.html': 35,
+            '/investor.html': 35,
+            '/ir.html': 30,
+            
+            # Special hosting patterns
+            'q4cdn.com': 45,
+            'q4inc.com': 45,
+            
+            # Generic financial terms
+            '/earnings': 20,
+            '/reports': 15,
+            '/governance': 15,
         }
         
+        # Expanded IR-related text patterns for scoring
         self.ir_text_patterns = {
+            # Primary IR terms (highest priority)
             'investor relations': 40,
+            'investor information': 35,
+            'shareholder information': 35,
             'investors': 30,
             'investor': 25,
             'shareholder': 20,
+            
+            # Financial/reporting terms (medium priority)
             'financial information': 20,
             'stock information': 20,
+            'sec filings': 25,
+            'annual reports': 20,
+            'quarterly reports': 20,
+            'earnings': 15,
+            'financial results': 20,
+            'corporate governance': 15,
+            
+            # Short forms (lower priority)
             'ir': 15,
+            'financials': 10,
+            'reports': 8,
+            'governance': 8,
         }
         
         # Domains to ignore (third-party sites)
@@ -78,25 +104,51 @@ class IRExtractorExact:
         return full_domain, root_domain
 
     def generate_ir_subdomain_candidates(self, root_domain: str, ticker: str) -> List[str]:
-        """Generate IR subdomain candidates based on notebook logic"""
+        """Generate comprehensive IR subdomain candidates based on expanded patterns"""
         candidates = []
         
-        # Check company-specific patterns first
-        for pattern_key, ir_url in self.company_specific_patterns.items():
-            if pattern_key in root_domain.lower():
-                candidates.append(ir_url)
-                break
-        
-        # Common IR subdomain patterns
-        common_patterns = [
+        # Expanded common IR subdomain patterns
+        subdomain_patterns = [
             f"https://investor.{root_domain}",
             f"https://investors.{root_domain}",
             f"https://ir.{root_domain}",
             f"https://investorrelations.{root_domain}",
-            f"https://s2.q4cdn.com/{ticker.lower()}/",  # Common IR hosting
+            f"https://shareholder.{root_domain}",
         ]
         
-        candidates.extend(common_patterns)
+        # Path-based patterns on main domain
+        path_patterns = [
+            f"https://www.{root_domain}/investor-relations",
+            f"https://www.{root_domain}/investors",
+            f"https://www.{root_domain}/investor",
+            f"https://www.{root_domain}/about/investors",
+            f"https://www.{root_domain}/en/investors",
+            f"https://www.{root_domain}/en/investors.html",
+            f"https://www.{root_domain}/investors.html",
+            f"https://www.{root_domain}/ir",
+            f"https://www.{root_domain}/shareholder",
+        ]
+        
+        # Special hosting patterns
+        special_patterns = [
+            f"https://s2.q4cdn.com/{ticker.lower()}/",  # Q4 hosting
+            f"https://ir.about{root_domain.split('.')[0]}.com",  # Amazon-style pattern
+        ]
+        
+        # Alternative domain patterns (common for large companies)
+        domain_base = root_domain.split('.')[0]  # e.g., "apple" from "apple.com"
+        alternative_patterns = [
+            f"https://{domain_base}investor.com",
+            f"https://investor{domain_base}.com", 
+            f"https://ir{domain_base}.com",
+        ]
+        
+        # Combine all patterns
+        candidates.extend(subdomain_patterns)
+        candidates.extend(path_patterns)
+        candidates.extend(special_patterns)
+        candidates.extend(alternative_patterns)
+        
         return candidates
 
     async def test_ir_subdomain(self, url: str, timeout: int = 15000) -> bool:
@@ -155,9 +207,23 @@ class IRExtractorExact:
         if root_domain in url_lower:
             return True
         
-        # Check for known IR subdomains
-        ir_subdomains = ['investor.', 'investors.', 'ir.', 'q4cdn.com']
+        # Check for expanded IR subdomain patterns
+        ir_subdomains = [
+            'investor.', 'investors.', 'ir.', 'investorrelations.', 
+            'shareholder.', 'q4cdn.com', 'q4inc.com'
+        ]
         if any(subdomain in url_lower for subdomain in ir_subdomains):
+            return True
+        
+        # Check for alternative domain patterns (e.g., pginvestor.com for P&G)
+        domain_base = root_domain.split('.')[0]
+        alternative_patterns = [
+            f'{domain_base}investor.com',
+            f'investor{domain_base}.com',
+            f'ir{domain_base}.com',
+            f'about{domain_base}.com'  # Amazon-style
+        ]
+        if any(pattern in url_lower for pattern in alternative_patterns):
             return True
         
         return False
