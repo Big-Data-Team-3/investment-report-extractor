@@ -16,6 +16,19 @@ The Investment Report Extractor is a sophisticated system that automates the ent
 - **📈 Financial Metrics Extraction**: Automated extraction of revenue, profit, and other metrics
 - **🏗️ Modular Architecture**: Pluggable components for different use cases
 
+## 🎥 Demo Recording
+
+Watch the system in action! Check out our comprehensive demo recording that showcases the entire pipeline from web crawling to PDF processing:
+
+**[📹 Investment Report Extractor Demo Recording](https://drive.google.com/drive/folders/1gJO4NV7__CoHLH4wuhkU_gp1uukrPN44?usp=sharing)**
+
+The recording demonstrates:
+- Web crawling and IR page discovery
+- Document extraction and classification
+- PDF processing with Docling
+- Financial metrics extraction
+- End-to-end workflow execution
+
 ## 📁 Project Structure
 
 ```
