@@ -42,31 +42,6 @@ investment-report-extractor/
 
 ### System Components
 
-```mermaid
-graph TB
-    A[Company List/Seed URLs] --> B[Step 1: Web Crawler]
-    B --> C[IR Page Discovery]
-    C --> D[Step 2: Document Extractor]
-    D --> E[Document Metadata & Links]
-    E --> F[Document Download]
-    F --> G[Step 3: PDF Parser]
-    G --> H[Content Extraction]
-    H --> I[Financial Analysis]
-    
-    subgraph "Pipeline Steps"
-        J[crawler.py - Discover IR Pages]
-        K[ir_doc_extract.py - Extract Links]
-        L[docling_pdf_parser.py - Parse PDFs]
-    end
-    
-    subgraph "Data Flow"
-        M[Raw URLs] --> N[IR Pages Found]
-        N --> O[Document Links]
-        O --> P[Downloaded Files]
-        P --> Q[Structured Content]
-    end
-```
-
 ### Data Flow
 
 1. **Input**: Company list or seed URLs
