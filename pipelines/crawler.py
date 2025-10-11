@@ -570,7 +570,7 @@ async def crawl_dow30_ir_pages(
     """
     Specialized crawler for DOW 30 IR pages using the efficient ir_extractor_exact logic.
     This bypasses the complex multi-page crawling and directly extracts IR pages.
-    
+    When test is True, it will only crawl the first 3 companies.
     Args:
         seed_url: DOW 30 CNBC URL
         config: Crawler configuration
@@ -631,6 +631,12 @@ async def crawl_dow30_ir_pages(
         if not companies:
             logger.error("No companies found in DOW 30 page")
             return {'companies': [], 'statistics': {'error': 'No companies found'}}
+        
+        # Limit to first 3 companies in test mode
+        if test:
+            original_count = len(companies)
+            companies = companies[:3]
+            logger.info(f"🧪 TEST MODE: Limited to first {len(companies)} companies (out of {original_count})")
         
     except Exception as e:
         logger.error(f"Error extracting DOW 30 companies: {e}")
