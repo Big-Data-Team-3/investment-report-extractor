@@ -6,8 +6,6 @@ readme = "README.md"
 requires-python = ">=3.13"
 
 dependencies = [
-    # Core web scraping and automation
-    "selenium>=4.15.0",
     "playwright>=1.55.0",
     "beautifulsoup4>=4.14.2",
     "requests>=2.32.5",
@@ -15,7 +13,6 @@ dependencies = [
     # AI and ML processing
     "openai>=2.2.0",
     "guidance>=0.3.0",
-    "torch>=2.8.0",
     "transformers>=4.57.0",
     # Data processing and analysis
     "pandas>=2.3.3",
@@ -30,7 +27,6 @@ dependencies = [
     "tqdm>=4.65.0",
     # Optional: Financial data
     "yfinance>=0.2.66",
-    "webdriver-manager",
 ]
 
 # Development dependencies are included in requirements.txt
