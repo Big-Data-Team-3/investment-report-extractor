@@ -649,7 +649,7 @@ upload = PythonOperator(
     task_id='upload_to_gcs',
     python_callable=upload_to_gcs,
     op_kwargs={
-        'bucket_name': 'your-bucket-name',
+        'bucket_name': 'investment-docs-7245-03',
         'source_file_path': '/tmp/test_upload.txt',
         'destination_blob_name': 'uploads/test_file.txt'
     },
@@ -660,7 +660,7 @@ list_objects = PythonOperator(
     task_id='list_gcs_objects',
     python_callable=list_gcs_objects,
     op_kwargs={
-        'bucket_name': 'your-bucket-name',
+        'bucket_name': 'investment-docs-7245-03',
         'prefix': 'uploads/'
     },
 )
@@ -670,7 +670,7 @@ download = PythonOperator(
     task_id='download_from_gcs',
     python_callable=download_from_gcs,
     op_kwargs={
-        'bucket_name': 'your-bucket-name',
+        'bucket_name': 'investment-docs-7245-03',
         'source_blob_name': 'uploads/test_file.txt',
         'destination_file_path': '/tmp/downloaded_file.txt'
     },
@@ -681,7 +681,7 @@ delete = PythonOperator(
     task_id='delete_from_gcs',
     python_callable=delete_from_gcs,
     op_kwargs={
-        'bucket_name': 'your-bucket-name',
+        'bucket_name': 'investment-docs-7245-03',
         'blob_name': 'uploads/test_file.txt'
     },
 )
