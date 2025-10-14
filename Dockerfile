@@ -1,34 +1,33 @@
-# Dockerfile
-FROM apache/airflow:3.1.0-python3.11
-
-USER root
-
-# Install minimal system dependencies including Chromium for Selenium
-# Split into stages to handle potential mirror issues
-RUN apt-get update && \
-    apt-get install -y wget curl && \
-    apt-get clean && \
-    apt-get update && \
-    apt-get install -y chromium chromium-driver || true && \
-    rm -rf /var/lib/apt/lists/*
+FROM apache/airflow:2.10.2-python3.10
 
 USER airflow
 
-# Copy requirements and install Python packages
-COPY requirements.txt /
-RUN pip install --no-cache-dir -r /requirements.txt
+RUN pip install --no-cache-dir --upgrade pip
 
-# Install Playwright Chromium browser only
-# This works cross-platform (ARM64 and AMD64)
+COPY --chown=airflow:root requirements.txt /tmp/requirements.txt
+
+RUN pip install --no-cache-dir playwright && \
+    pip install --no-cache-dir -r /tmp/requirements.txt
+
+USER root
+
+SHELL ["/bin/bash", "-c"]
+
+# Install with retry logic - try 3 times before failing
+RUN for pkg in libnss3 libnspr4 libgbm1 libx11-6 libxcb1 libxext6 libglib2.0-0 libdbus-1-3 libatk1.0-0 libatspi2.0-0 libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libxkbcommon0 libasound2; do \
+        for i in 1 2 3; do \
+            apt-get update && \
+            apt-get install -y --no-install-recommends $pkg && \
+            rm -rf /var/lib/apt/lists/* && \
+            break || { \
+                echo "Retry $i for $pkg"; \
+                sleep 2; \
+            }; \
+        done; \
+    done
+
+USER airflow
+
 RUN playwright install chromium
 
-# Install only the minimal system dependencies needed for Chromium
-# Using --dry-run first to see what's needed, then install selectively
-USER root
-RUN apt-get update && \
-    python3 -m playwright install-deps chromium || true && \
-    apt-get clean && \
-    rm -rf /var/lib/apt/lists/*
-
-# Switch back to airflow user for runtime
-USER airflow
+WORKDIR /opt/airflow

@@ -4,41 +4,27 @@ version = "0.1.0"
 description = "A comprehensive end-to-end pipeline for extracting, processing, and analyzing investment reports from company investor relations pages"
 readme = "README.md"
 requires-python = ">=3.13"
+
 dependencies = [
-    # Core web scraping and automation
-    "selenium>=4.15.0",
     "playwright>=1.55.0",
     "beautifulsoup4>=4.14.2",
     "requests>=2.32.5",
     "lxml>=6.0.2",
-    
     # AI and ML processing
     "openai>=2.2.0",
     "guidance>=0.3.0",
-    "torch>=2.8.0",
     "transformers>=4.57.0",
-    
-    # PDF processing and document analysis
-    "docling>=1.0.0",
-    "docling-core>=1.0.0",
-    
     # Data processing and analysis
     "pandas>=2.3.3",
     "numpy>=1.24.0",
-    
     # Development and notebooks
     "jupyter>=1.1.1",
     "jupyterlab>=4.4.9",
     "ipykernel>=6.30.1",
-    
     # Configuration and utilities
     "python-dotenv>=1.1.1",
     "pathlib>=1.0.1",
     "tqdm>=4.65.0",
-    
-    # Optional: Airflow for orchestration
-    "apache-airflow>=3.1.0",
-    
     # Optional: Financial data
     "yfinance>=0.2.66",
 ]
@@ -53,3 +39,6 @@ Issues = "https://github.com/yourusername/investment-report-extractor/issues"
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["pipelines"]

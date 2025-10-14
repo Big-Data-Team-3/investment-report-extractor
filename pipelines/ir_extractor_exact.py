@@ -472,8 +472,23 @@ class IRExtractorExact:
     async def extract_ir_pages_for_companies(self, companies: List[Dict], 
                                            debug: bool = True,
                                            test: bool = False) -> List[Dict]:
-        """Extract IR pages for a list of companies"""
+        """Extract IR pages for a list of companies
+        
+        Args:
+            companies: List of company dictionaries with ticker, company_name, cnbc_url
+            debug: Enable debug logging
+            test: If True, only process first 3 companies for quick testing
+        
+        Returns:
+            List of updated company dictionaries with IR URLs
+        """
         updated_companies = []
+        
+        # Limit to first 3 companies in test mode
+        if test:
+            original_count = len(companies)
+            companies = companies[:3]
+            logger.info(f"🧪 TEST MODE: Processing only {len(companies)} companies (out of {original_count})")
         
         logger.info(f"Extracting IR pages for {len(companies)} companies using exact mode...")
         

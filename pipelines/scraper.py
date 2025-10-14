@@ -1,17 +1,19 @@
 import asyncio
 from playwright.async_api import async_playwright
 import multiprocessing as mp
-from ._filters import filter_exact_mode, filter_guidance_mode, filter_ai_mode
+from _filters import filter_exact_mode, filter_guidance_mode, filter_ai_mode
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin, urlparse
 from typing import Dict, List, Optional
 import re
 import logging
-from ._guidance import load_env
+from _guidance import load_env
 from guidance import system, user, assistant, gen, select
 from guidance.models import OpenAI
 import time
-from .ir_extractor_exact import filter_links_exact_enhanced
+from ir_extractor_exact import filter_links_exact_enhanced
+import subprocess
+import sys
 
 # region Logging
 # Configure logging
@@ -95,6 +97,23 @@ async def run_scraper(seed_url:str,root_intent:str,parent_context:dict=None, scr
     except Exception as e:
         logger.error(f"Error in run_scraper for {seed_url}: {e}")
         return None
+
+# endregion
+
+def _ensure_playwright_browsers():
+    """Ensure Playwright browsers are installed"""
+    try:
+        # Try to install browsers if they don't exist
+        result = subprocess.run([
+            sys.executable, '-m', 'playwright', 'install', 'chromium'
+        ], capture_output=True, text=True, timeout=300)
+        
+        if result.returncode == 0:
+            logger.info("Playwright browsers installed successfully")
+        else:
+            logger.warning(f"Playwright browser installation failed: {result.stderr}")
+    except Exception as e:
+        logger.warning(f"Failed to install Playwright browsers: {e}")
 
 # endregion
 
@@ -253,12 +272,22 @@ def parse_raw_content(content,base_url:str,intent:str):
 async def scrape_website(url: str, headless: bool = True, timeout: int = 60000, max_retries: int = 3):
     """Scrape a website with anti-bot measures and retries"""
     
+    # Ensure browsers are installed before attempting to scrape
+    _ensure_playwright_browsers()
+    
     for attempt in range(max_retries):
         try:
             async with async_playwright() as p:
                 browser = await p.chromium.launch(
                     headless=headless,
-                    args=['--disable-blink-features=AutomationControlled']
+                    args=[
+                        '--disable-blink-features=AutomationControlled',
+                        '--no-sandbox',
+                        '--disable-dev-shm-usage',
+                        '--disable-gpu',
+                        '--disable-web-security',
+                        '--disable-features=VizDisplayCompositor'
+                    ]
                 )
                 
                 context = await browser.new_context(
@@ -281,6 +310,43 @@ async def scrape_website(url: str, headless: bool = True, timeout: int = 60000, 
                 
         except Exception as e:
             logger.warning(f"Scrape attempt {attempt + 1}/{max_retries} failed for {url}: {str(e)[:200]}")
+            
+            # Try alternative browser launch method on second attempt
+            if attempt == 1:
+                try:
+                    logger.info("Trying alternative browser launch method...")
+                    async with async_playwright() as p:
+                        browser = await p.chromium.launch(
+                            headless=True,
+                            args=[
+                                '--no-sandbox',
+                                '--disable-dev-shm-usage',
+                                '--disable-gpu',
+                                '--disable-web-security',
+                                '--single-process',
+                                '--disable-background-timer-throttling',
+                                '--disable-backgrounding-occluded-windows',
+                                '--disable-renderer-backgrounding'
+                            ]
+                        )
+                        
+                        context = await browser.new_context(
+                            user_agent='Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                            viewport={'width': 1920, 'height': 1080},
+                        )
+                        
+                        page = await context.new_page()
+                        await page.goto(url, wait_until="load", timeout=timeout)
+                        await page.wait_for_timeout(1000)
+                        
+                        content = await page.content()
+                        await browser.close()
+                        
+                        logger.debug(f"Successfully scraped {url} with alternative method (attempt {attempt + 1})")
+                        return content
+                        
+                except Exception as alt_e:
+                    logger.warning(f"Alternative browser method also failed: {str(alt_e)[:200]}")
             
             if attempt < max_retries - 1:
                 wait_time = 2 ** attempt

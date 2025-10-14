@@ -17,10 +17,10 @@ from urllib.parse import urlparse, urlunparse, parse_qs, urlencode
 from datetime import datetime
 
 # Import from scraper module
-from .scraper import run_scraper, _classify_page_type
-from ._guidance import load_model
+from scraper import run_scraper, _classify_page_type
+from _guidance import load_model
 from guidance import system, user, assistant, gen
-from .ir_extractor_exact import IRExtractorExact
+from ir_extractor_exact import IRExtractorExact
 
 # region Logging
 # Configure logging
@@ -570,7 +570,7 @@ async def crawl_dow30_ir_pages(
     """
     Specialized crawler for DOW 30 IR pages using the efficient ir_extractor_exact logic.
     This bypasses the complex multi-page crawling and directly extracts IR pages.
-    
+    When test is True, it will only crawl the first 3 companies.
     Args:
         seed_url: DOW 30 CNBC URL
         config: Crawler configuration
@@ -632,9 +632,15 @@ async def crawl_dow30_ir_pages(
             logger.error("No companies found in DOW 30 page")
             return {'companies': [], 'statistics': {'error': 'No companies found'}}
         
+        # Limit to first 3 companies in test mode
+        if test:
+            original_count = len(companies)
+            companies = companies[:3]
+            logger.info(f"🧪 TEST MODE: Limited to first {len(companies)} companies (out of {original_count})")
+        
     except Exception as e:
         logger.error(f"Error extracting DOW 30 companies: {e}")
-        return {'companies': [], 'statistics': {'error': str(e)}}
+        return {'companies': [], 'ir_pages': [], 'statistics': {'error': str(e)}}
     
     # Step 2: Use IR Extractor to find IR pages for all companies
     logger.info("Step 2: Finding IR pages using efficient extraction logic...")
@@ -651,7 +657,7 @@ async def crawl_dow30_ir_pages(
         
     except Exception as e:
         logger.error(f"Error during IR extraction: {e}")
-        return {'companies': companies, 'statistics': {'error': str(e)}}
+        return {'companies': companies, 'ir_pages': [], 'statistics': {'error': str(e)}}
     
     # Step 3: Prepare results in crawler format
     terminal_results = []
@@ -1072,26 +1078,28 @@ if __name__ == "__main__":
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         
         # Save enriched companies
-        companies_file = f"data/dow30_companies_with_ir_{timestamp}.json"
+        companies_file = f"data/dow30_companies_with_ir.json"
         with open(companies_file, 'w') as f:
-            json.dump(results['companies'], f, indent=2)
+            json.dump(results.get('companies', []), f, indent=2)
         logger.info(f"Companies with IR pages saved to: {companies_file}")
         
         # Save IR pages list
-        ir_pages_file = f"data/dow30_ir_pages_{timestamp}.json"
+        ir_pages_file = f"data/dow30_ir_pages.json"
         with open(ir_pages_file, 'w') as f:
-            json.dump(results['ir_pages'], f, indent=2)
+            json.dump(results.get('ir_pages', []), f, indent=2)
         logger.info(f"IR pages list saved to: {ir_pages_file}")
         
         # Print summary
-        stats = results['statistics']
+        stats = results.get('statistics', {})
         logger.info("="*80)
         logger.info("EFFICIENT IR EXTRACTION SUMMARY")
         logger.info("="*80)
-        logger.info(f"Companies Processed: {stats['total_companies_processed']}")
-        logger.info(f"IR Pages Found: {stats['total_ir_pages_found']}")
-        logger.info(f"Success Rate: {stats['success_rate']:.1%}")
-        logger.info(f"Duration: {stats['total_duration_seconds']:.2f} seconds")
+        logger.info(f"Companies Processed: {stats.get('total_companies_processed', 0)}")
+        logger.info(f"IR Pages Found: {stats.get('total_ir_pages_found', 0)}")
+        success_rate = stats.get('success_rate', 0)
+        logger.info(f"Success Rate: {success_rate:.1%}" if isinstance(success_rate, (int, float)) else f"Success Rate: N/A")
+        duration = stats.get('total_duration_seconds', 0)
+        logger.info(f"Duration: {duration:.2f} seconds" if isinstance(duration, (int, float)) else "Duration: N/A")
         logger.info("="*80)
         
     else:
@@ -1114,7 +1122,7 @@ the seed URL (current)."""
         
         # Save results
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        results_file = f"data/crawl_results_{timestamp}.json"
+        results_file = f"data/crawl_results.json"
         save_results_to_file(results, results_file)
         
         # Print summary
