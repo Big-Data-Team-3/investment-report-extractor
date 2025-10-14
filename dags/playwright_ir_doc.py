@@ -37,9 +37,9 @@ logger = logging.getLogger(__name__)
 # CONFIGURATION
 # ============================================================================
 
-INPUT_JSON = "/Users/RiyanshiKedia/Documents/GitHub/investment-report-extractor/data/dow30_ir_pages.json"
-OUTPUT_JSON = "/Users/RiyanshiKedia/Documents/GitHub/investment-report-extractor/data/documents/test_2_companies.json"
-DOWNLOAD_DIR = "/Users/RiyanshiKedia/Documents/GitHub/investment-report-extractor/data/reports"
+INPUT_JSON = "opt/airflow/dags/data/dow30_ir_pages.json"
+OUTPUT_JSON = "opt/airflow/dags/data/documents/test_2_companies.json"
+DOWNLOAD_DIR = "opt/airflow/dags/data/reports"
 
 # Number of companies to process
 NUM_COMPANIES = 2
@@ -100,20 +100,92 @@ class PlaywrightIRExtractor:
         if self.debug:
             logger.info("Setting up Playwright browser...")
         
-        self.playwright = await async_playwright().start()
-        self.browser = await self.playwright.chromium.launch(
-            headless=True,
-            args=['--no-sandbox', '--disable-dev-shm-usage']
-        )
-        self.context = await self.browser.new_context(
-            viewport={'width': 1920, 'height': 1080},
-            user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-        )
-        self.page = await self.context.new_page()
-        self.page.set_default_timeout(45000)
+        try:
+            # Clean up any existing instances first
+            await self._cleanup_existing()
+            
+            # Start Playwright
+            self.playwright = await async_playwright().start()
+            logger.info("✅ Playwright started")
+            
+            # Launch browser with more conservative settings for Airflow/Docker
+            self.browser = await self.playwright.chromium.launch(
+                headless=True,
+                args=[
+                    '--disable-dev-shm-usage',     # Don't use /dev/shm (often too small in containers)
+                    '--no-sandbox',                # Required in Docker/containers
+                    '--disable-gpu',               # Disable GPU hardware acceleration
+                    '--disable-web-security',      # Disable web security
+                    '--disable-features=VizDisplayCompositor',  # Disable VizDisplayCompositor
+                    '--disable-extensions',        # Disable extensions
+                    '--disable-plugins',           # Disable plugins
+                    '--disable-images',            # Disable images for faster loading
+                    '--memory-pressure-off',       # Disable memory pressure
+                    '--max_old_space_size=4096',   # Increase memory limit
+                ]
+            )
+            logger.info("✅ Browser launched")
+            
+            # Create context with minimal settings
+            self.context = await self.browser.new_context(
+                viewport={'width': 1280, 'height': 720},  # Smaller viewport
+                user_agent='Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+                ignore_https_errors=True,
+                bypass_csp=True,
+                java_script_enabled=True,
+                accept_downloads=True
+            )
+            logger.info("✅ Browser context created")
+            
+            # Create page
+            self.page = await self.context.new_page()
+            self.page.set_default_timeout(30000)  # Reduced timeout
+            logger.info("✅ Browser page created")
+            
+            # Test the browser with a simple navigation
+            try:
+                await self.page.goto('about:blank', timeout=10000)
+                logger.info("✅ Browser test navigation successful")
+            except Exception as test_e:
+                logger.warning(f"⚠️ Browser test navigation failed: {test_e}")
+            
+            if self.debug:
+                logger.info("✅ Playwright browser ready")
+                
+        except Exception as e:
+            logger.error(f"❌ Failed to setup Playwright: {e}")
+            await self._cleanup_existing()
+            raise
+    
+    async def _cleanup_existing(self):
+        """Clean up any existing browser instances"""
+        try:
+            if self.page:
+                await self.page.close()
+                self.page = None
+        except:
+            pass
         
-        if self.debug:
-            logger.info("✅ Playwright browser ready")
+        try:
+            if self.context:
+                await self.context.close()
+                self.context = None
+        except:
+            pass
+        
+        try:
+            if self.browser:
+                await self.browser.close()
+                self.browser = None
+        except:
+            pass
+        
+        try:
+            if self.playwright:
+                await self.playwright.stop()
+                self.playwright = None
+        except:
+            pass
     
     def _normalize_url(self, url: str) -> str:
         try:
@@ -142,16 +214,121 @@ class PlaywrightIRExtractor:
     
     async def _wait_for_dynamic_content(self, url: str):
         try:
-            await self.page.wait_for_selector('body', timeout=10000)
+            logger.info(f"⏳ Waiting for dynamic content on {url}")
+            
+            # Wait for body to be present
+            await self.page.wait_for_selector('body', timeout=15000)
+            logger.info("✅ Body element found")
+            
+            # Initial wait for content to load
             await asyncio.sleep(4)
+            logger.info("✅ Initial content load wait completed")
+            
+            # Try to find document links
             try:
-                await self.page.wait_for_selector('a[href*="pdf"], a[href*="10-k"]', timeout=8000)
-            except:
-                await self.page.wait_for_function('document.querySelectorAll("a").length > 20', timeout=5000)
+                await self.page.wait_for_selector('a[href*="pdf"], a[href*="10-k"], a[href*="10-q"]', timeout=10000)
+                logger.info("✅ Document links found")
+            except Exception as e:
+                logger.warning(f"⚠️ Document links not found: {e}")
+                # Fallback: wait for any links
+                try:
+                    await self.page.wait_for_function('document.querySelectorAll("a").length > 20', timeout=8000)
+                    logger.info("✅ General links found")
+                except Exception as e2:
+                    logger.warning(f"⚠️ No links found: {e2}")
+            
+            # Additional wait for any remaining dynamic content
             await asyncio.sleep(2)
-        except:
-            pass
+            logger.info("✅ Dynamic content wait completed")
+            
+        except Exception as e:
+            logger.warning(f"⚠️ Dynamic content wait failed for {url}: {e}")
+            # Don't raise - continue with whatever content we have
     
+    async def extract_documents_simple(self, ir_url: str, ticker: str, company_name: str) -> List[DocumentInfo]:
+        """Simple extraction using requests + BeautifulSoup as fallback"""
+        logger.info(f"🔄 [{ticker}] Using simple extraction fallback for {ir_url}")
+        
+        try:
+            import requests
+            from bs4 import BeautifulSoup
+            
+            # Try multiple user agents and headers
+            headers_list = [
+                {
+                    'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+                    'Accept-Language': 'en-US,en;q=0.5',
+                    'Accept-Encoding': 'gzip, deflate',
+                    'Connection': 'keep-alive',
+                    'Upgrade-Insecure-Requests': '1',
+                },
+                {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+                    'Accept': '*/*',
+                    'Accept-Language': 'en-US,en;q=0.9',
+                },
+                {
+                    'User-Agent': 'curl/7.68.0',
+                    'Accept': '*/*',
+                }
+            ]
+            
+            response = requests.get(ir_url, headers=headers, timeout=30)
+            response.raise_for_status()
+            
+            soup = BeautifulSoup(response.content, 'html.parser')
+            links = soup.find_all('a', href=True)
+            logger.info(f"🔗 [{ticker}] Found {len(links)} total links")
+            
+            # Log some links for debugging
+            for i, link in enumerate(links[:20]):
+                href = link.get('href', '')
+                text = link.get_text(strip=True)
+                logger.info(f"   Link {i+1}: '{text}' -> {href}")
+            
+            documents = []
+            for link in links:
+                try:
+                    href = link.get('href', '')
+                    text = link.get_text(strip=True)
+                    
+                    if not href or href.startswith('#') or not text:
+                        continue
+                    
+                    full_url = urljoin(ir_url, href)
+                    
+                    if self._is_direct_file(full_url):
+                        doc = DocumentInfo(
+                            title=text[:200],
+                            url=full_url,
+                            normalized_url=self._normalize_url(full_url),
+                            document_type=self._classify_document(full_url, text, ''),
+                            publication_date=None,
+                            file_extension=self._get_extension(full_url),
+                            relevance_score=100.0,
+                            section='Main Page',
+                            subsection='Direct Link',
+                            content_preview=text[:150],
+                            metadata={},
+                            is_direct_file=True,
+                            extracted_year=self._extract_year_improved(text + ' ' + full_url),
+                            extracted_quarter=self._extract_quarter(text + ' ' + full_url)
+                        )
+                        documents.append(doc)
+                        logger.info(f"📄 [{ticker}] Found document: {text} -> {full_url}")
+                        
+                except Exception as e:
+                    logger.warning(f"⚠️ [{ticker}] Error processing link: {e}")
+                    continue
+            
+            logger.info(f"✅ [{ticker}] Simple extraction found {len(documents)} documents")
+            return documents[:10]  # Limit to 10 documents
+            
+        except Exception as e:
+            logger.error(f"❌ [{ticker}] Simple extraction failed: {e}")
+            return []
+
     async def extract_documents(self, ir_url: str, ticker: str, company_name: str) -> List[DocumentInfo]:
         if not self._is_valid_ir_url(ir_url):
             logger.error(f"❌ {ticker}: Invalid IR URL")
@@ -165,18 +342,46 @@ class PlaywrightIRExtractor:
         
         for attempt in range(self.max_retries):
             try:
-                await self.page.goto(ir_url, wait_until='domcontentloaded')
+                logger.info(f"🌐 [{ticker}] Attempt {attempt + 1}/{self.max_retries}: Navigating to {ir_url}")
+                
+                # Check browser state before navigation
+                try:
+                    browser_alive = self.browser is not None
+                    context_alive = self.context is not None
+                    page_alive = self.page is not None
+                    logger.info(f"🔧 [{ticker}] Browser state - Browser: {browser_alive}, Context: {context_alive}, Page: {page_alive}")
+                except Exception as state_e:
+                    logger.warning(f"⚠️ [{ticker}] Could not check browser state: {state_e}")
+                
+                # Navigate to main IR page
+                await self.page.goto(ir_url, wait_until='domcontentloaded', timeout=60000)
+                logger.info(f"✅ [{ticker}] Successfully navigated to main IR page")
+                
+                # Wait for dynamic content
                 await self._wait_for_dynamic_content(ir_url)
                 
                 content = await self.page.content()
                 sections = await self._discover_sections(ir_url, content)
+                logger.info(f"🔍 [{ticker}] Found {len(sections)} sections")
                 
-                if self.debug:
-                    logger.info(f"Found {len(sections)} sections")
+                if not sections:
+                    logger.warning(f"⚠️ [{ticker}] No sections found - checking page content")
+                    # Log some page content for debugging
+                    soup = BeautifulSoup(content, 'html.parser')
+                    links = soup.find_all('a', href=True)
+                    logger.info(f"🔗 [{ticker}] Total links on page: {len(links)}")
+                    for i, link in enumerate(links[:10]):  # Show first 10 links
+                        href = link.get('href', '')
+                        text = link.get_text(strip=True)
+                        logger.info(f"   Link {i+1}: '{text}' -> {href}")
                 
-                for section_name, section_url in sections:
+                # Process each section
+                for section_idx, (section_name, section_url) in enumerate(sections):
                     try:
-                        await self.page.goto(section_url, wait_until='domcontentloaded')
+                        logger.info(f"📂 [{ticker}] Processing section {section_idx + 1}/{len(sections)}: {section_name}")
+                        logger.info(f"   Section URL: {section_url}")
+                        
+                        await self.page.goto(section_url, wait_until='domcontentloaded', timeout=60000)
                         await self._wait_for_dynamic_content(section_url)
                         await asyncio.sleep(random.uniform(*self.request_delay))
                         
@@ -184,39 +389,97 @@ class PlaywrightIRExtractor:
                         soup = BeautifulSoup(section_content, 'html.parser')
                         docs = self._extract_all_files_from_page(soup, section_url, section_name)
                         
-                        if self.debug:
-                            logger.info(f"  • {section_name}: {len(docs)} docs")
+                        logger.info(f"   📄 {section_name}: Found {len(docs)} documents")
+                        
+                        # Log document details
+                        for doc_idx, doc in enumerate(docs[:5]):  # Show first 5 docs
+                            logger.info(f"      Doc {doc_idx + 1}: {doc.title} ({doc.file_extension})")
                         
                         all_raw_documents.extend(docs)
-                    except Exception as e:
-                        logger.error(f"Error in section {section_name}: {e}")
+                        
+                    except Exception as section_e:
+                        logger.error(f"❌ [{ticker}] Error in section '{section_name}': {section_e}")
+                        logger.error(f"   Section URL: {section_url}")
+                        logger.error(f"   Error type: {type(section_e).__name__}")
+                        import traceback
+                        logger.error(f"   Traceback: {traceback.format_exc()}")
                         continue
                 
                 if all_raw_documents:
+                    logger.info(f"✅ [{ticker}] Successfully extracted {len(all_raw_documents)} documents")
                     break
+                else:
+                    logger.warning(f"⚠️ [{ticker}] No documents found in attempt {attempt + 1}")
                 
             except Exception as e:
+                logger.error(f"❌ [{ticker}] Attempt {attempt + 1} failed: {e}")
+                logger.error(f"   Error type: {type(e).__name__}")
+                logger.error(f"   URL: {ir_url}")
+                
+                # Check if it's a browser/target closed error
+                error_msg = str(e).lower()
+                if any(keyword in error_msg for keyword in ['target', 'closed', 'browser', 'context', 'page']):
+                    logger.error(f"   🚨 Browser/Target closed error detected!")
+                    try:
+                        # Try to restart browser
+                        logger.info(f"   🔄 [{ticker}] Attempting browser restart...")
+                        await self._restart_browser()
+                        logger.info(f"   ✅ [{ticker}] Browser restarted successfully")
+                    except Exception as restart_e:
+                        logger.error(f"   ❌ [{ticker}] Browser restart failed: {restart_e}")
+                
+                import traceback
+                logger.error(f"   📋 Full traceback: {traceback.format_exc()}")
+                
                 if attempt < self.max_retries - 1:
-                    logger.warning(f"Retry {attempt + 1}/{self.max_retries}")
+                    logger.warning(f"🔄 [{ticker}] Retrying in 5 seconds...")
                     await asyncio.sleep(5)
                 else:
-                    logger.error(f"❌ {ticker}: Failed")
-                    return []
+                    logger.error(f"💥 [{ticker}] All Playwright attempts failed - trying simple extraction")
+                    # Fallback to simple extraction
+                    try:
+                        simple_docs = await self.extract_documents_simple(ir_url, ticker, company_name)
+                        if simple_docs:
+                            logger.info(f"✅ [{ticker}] Simple extraction succeeded with {len(simple_docs)} documents")
+                            return simple_docs
+                        else:
+                            logger.error(f"❌ [{ticker}] Simple extraction also failed")
+                            return []
+                    except Exception as simple_e:
+                        logger.error(f"❌ [{ticker}] Simple extraction failed: {simple_e}")
+                        return []
         
+        # Filter and deduplicate
+        logger.info(f"🔍 [{ticker}] Filtering documents (before: {len(all_raw_documents)})")
         all_raw_documents = [d for d in all_raw_documents if d.is_direct_file]
-        deduplicated = self._global_deduplicate_improved(all_raw_documents)
+        logger.info(f"📄 [{ticker}] Direct files: {len(all_raw_documents)}")
         
-        if self.debug:
-            logger.info(f"Final: {len(deduplicated)} unique documents")
+        deduplicated = self._global_deduplicate_improved(all_raw_documents)
+        logger.info(f"🎯 [{ticker}] Final unique documents: {len(deduplicated)}")
+        
+        # Log final results
+        if deduplicated:
+            logger.info(f"📊 [{ticker}] Document types found:")
+            type_counts = {}
+            for doc in deduplicated:
+                type_counts[doc.document_type] = type_counts.get(doc.document_type, 0) + 1
+            for doc_type, count in type_counts.items():
+                logger.info(f"   • {doc_type}: {count}")
+        else:
+            logger.warning(f"⚠️ [{ticker}] No documents extracted!")
         
         return deduplicated
     
     async def _discover_sections(self, base_url: str, content: str) -> List[Tuple[str, str]]:
+        logger.info(f"🔍 Discovering sections from {base_url}")
+        
         soup = BeautifulSoup(content, 'html.parser')
         all_links = soup.find_all('a', href=True)
+        logger.info(f"📄 Found {len(all_links)} total links on page")
         
         priority_keywords = ['sec filing', '10-k', '10-q', 'financial', 'earnings']
         sections = []
+        financial_links = []
         
         for link in all_links:
             try:
@@ -231,11 +494,26 @@ class PlaywrightIRExtractor:
                 if urlparse(full_url).netloc != urlparse(base_url).netloc:
                     continue
                 
+                # Check if it's a financial/investor link
+                text_lower = text.lower()
+                href_lower = href.lower()
+                if any(kw in text_lower or kw in href_lower for kw in priority_keywords):
+                    financial_links.append((text, href, full_url))
+                
                 if self._is_likely_section_link(text, href, link):
                     priority = sum(1 for kw in priority_keywords if kw in text.lower())
                     sections.append((text, full_url, priority))
-            except:
+                    
+            except Exception as e:
+                logger.warning(f"⚠️ Error processing link: {e}")
                 continue
+        
+        logger.info(f"💰 Found {len(financial_links)} financial/investor links")
+        logger.info(f"📂 Found {len(sections)} potential sections")
+        
+        # Log some financial links for debugging
+        for i, (text, href, full_url) in enumerate(financial_links[:10]):
+            logger.info(f"   Financial link {i+1}: '{text}' -> {href}")
         
         sections.sort(key=lambda x: x[2], reverse=True)
         
@@ -245,7 +523,13 @@ class PlaywrightIRExtractor:
             if normalized not in unique_sections:
                 unique_sections[normalized] = (name, url)
         
-        return list(unique_sections.values())[:self.max_sections]
+        final_sections = list(unique_sections.values())[:self.max_sections]
+        logger.info(f"🎯 Returning {len(final_sections)} unique sections")
+        
+        for i, (name, url) in enumerate(final_sections):
+            logger.info(f"   Section {i+1}: '{name}' -> {url}")
+        
+        return final_sections
     
     def _is_likely_section_link(self, text: str, href: str, link) -> bool:
         text_lower = text.lower()
@@ -405,15 +689,20 @@ class PlaywrightIRExtractor:
                 return ext
         return '.unknown'
     
+    async def _restart_browser(self):
+        """Restart the browser, context, and page"""
+        try:
+            logger.info("🔄 Restarting Playwright browser...")
+            await self._cleanup_existing()
+            await asyncio.sleep(2)  # Give time for cleanup
+            await self._setup_playwright()
+            logger.info("✅ Browser restarted successfully")
+        except Exception as e:
+            logger.error(f"❌ Failed to restart browser: {e}")
+            raise
+    
     async def close(self):
-        if self.page:
-            await self.page.close()
-        if self.context:
-            await self.context.close()
-        if self.browser:
-            await self.browser.close()
-        if self.playwright:
-            await self.playwright.stop()
+        await self._cleanup_existing()
 
 
 # ============================================================================

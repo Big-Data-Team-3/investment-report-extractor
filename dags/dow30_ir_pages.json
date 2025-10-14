@@ -1,0 +1,366 @@
+[
+  {
+    "url": "https://investors.coca-colacompany.com",
+    "type": "IR_PAGE",
+    "title": "KO Investor Relations",
+    "metadata": {
+      "ticker": "KO",
+      "company_name": "KO",
+      "cnbc_url": "https://www.cnbc.com/quotes/KO",
+      "company_website": "https://www.coca-colacompany.com/",
+      "extraction_method": "ir_extractor_exact",
+      "timestamp": "2025-10-11T13:51:02.157638"
+    }
+  },
+  {
+    "url": "https://investors.sherwin-williams.com/financials/sec-filings/default.aspx",
+    "type": "IR_PAGE",
+    "title": "SHW Investor Relations",
+    "metadata": {
+      "ticker": "SHW",
+      "company_name": "SHW",
+      "cnbc_url": "https://www.cnbc.com/quotes/SHW",
+      "company_website": "https://www.sherwin-williams.com/",
+      "extraction_method": "ir_extractor_exact",
+      "timestamp": "2025-10-11T13:51:02.157941"
+    }
+  },
+  {
+    "url": "https://www.ibm.com/investor",
+    "type": "IR_PAGE",
+    "title": "IBM Investor Relations",
+    "metadata": {
+      "ticker": "IBM",
+      "company_name": "IBM",
+      "cnbc_url": "https://www.cnbc.com/quotes/IBM",
+      "company_website": "https://www.ibm.com/",
+      "extraction_method": "ir_extractor_exact",
+      "timestamp": "2025-10-11T13:51:02.157954"
+    }
+  },
+  {
+    "url": "https://investor.jnj.com",
+    "type": "IR_PAGE",
+    "title": "JNJ Investor Relations",
+    "metadata": {
+      "ticker": "JNJ",
+      "company_name": "JNJ",
+      "cnbc_url": "https://www.cnbc.com/quotes/JNJ",
+      "company_website": "https://www.jnj.com/",
+      "extraction_method": "ir_extractor_exact",
+      "timestamp": "2025-10-11T13:51:02.157968"
+    }
+  },
+  {
+    "url": "https://ir.jpmorganchase.com",
+    "type": "IR_PAGE",
+    "title": "JPM Investor Relations",
+    "metadata": {
+      "ticker": "JPM",
+      "company_name": "JPM",
+      "cnbc_url": "https://www.cnbc.com/quotes/JPM",
+      "company_website": "https://www.jpmorganchase.com/",
+      "extraction_method": "ir_extractor_exact",
+      "timestamp": "2025-10-11T13:51:02.157975"
+    }
+  },
+  {
+    "url": "https://investor.mcdonalds.com",
+    "type": "IR_PAGE",
+    "title": "MCD Investor Relations",
+    "metadata": {
+      "ticker": "MCD",
+      "company_name": "MCD",
+      "cnbc_url": "https://www.cnbc.com/quotes/MCD",
+      "company_website": "https://www.mcdonalds.com/",
+      "extraction_method": "ir_extractor_exact",
+      "timestamp": "2025-10-11T13:51:02.157977"
+    }
+  },
+  {
+    "url": "https://investors.3m.com",
+    "type": "IR_PAGE",
+    "title": "MMM Investor Relations",
+    "metadata": {
+      "ticker": "MMM",
+      "company_name": "MMM",
+      "cnbc_url": "https://www.cnbc.com/quotes/MMM",
+      "company_website": "https://www.3m.com/",
+      "extraction_method": "ir_extractor_exact",
+      "timestamp": "2025-10-11T13:51:02.157983"
+    }
+  },
+  {
+    "url": "https://investors.merck.com",
+    "type": "IR_PAGE",
+    "title": "MRK Investor Relations",
+    "metadata": {
+      "ticker": "MRK",
+      "company_name": "MRK",
+      "cnbc_url": "https://www.cnbc.com/quotes/MRK",
+      "company_website": "https://www.merck.com/",
+      "extraction_method": "ir_extractor_exact",
+      "timestamp": "2025-10-11T13:51:02.157985"
+    }
+  },
+  {
+    "url": "https://Investors.Nike.com",
+    "type": "IR_PAGE",
+    "title": "NKE Investor Relations",
+    "metadata": {
+      "ticker": "NKE",
+      "company_name": "NKE",
+      "cnbc_url": "https://www.cnbc.com/quotes/NKE",
+      "company_website": "https://about.nike.com/",
+      "extraction_method": "ir_extractor_exact",
+      "timestamp": "2025-10-11T13:51:02.157987"
+    }
+  },
+  {
+    "url": "https://www.pg.com/investor-relations",
+    "type": "IR_PAGE",
+    "title": "PG Investor Relations",
+    "metadata": {
+      "ticker": "PG",
+      "company_name": "PG",
+      "cnbc_url": "https://www.cnbc.com/quotes/PG",
+      "company_website": "https://us.pg.com/",
+      "extraction_method": "ir_extractor_exact",
+      "timestamp": "2025-10-11T13:51:02.157990"
+    }
+  },
+  {
+    "url": "https://ir.americanexpress.com",
+    "type": "IR_PAGE",
+    "title": "AXP Investor Relations",
+    "metadata": {
+      "ticker": "AXP",
+      "company_name": "AXP",
+      "cnbc_url": "https://www.cnbc.com/quotes/AXP",
+      "company_website": "https://www.americanexpress.com/",
+      "extraction_method": "ir_extractor_exact",
+      "timestamp": "2025-10-11T13:51:02.157992"
+    }
+  },
+  {
+    "url": "https://investors.boeing.com",
+    "type": "IR_PAGE",
+    "title": "BA Investor Relations",
+    "metadata": {
+      "ticker": "BA",
+      "company_name": "BA",
+      "cnbc_url": "https://www.cnbc.com/quotes/BA",
+      "company_website": "https://www.boeing.com",
+      "extraction_method": "ir_extractor_exact",
+      "timestamp": "2025-10-11T13:51:02.157999"
+    }
+  },
+  {
+    "url": "https://investors.caterpillar.com",
+    "type": "IR_PAGE",
+    "title": "CAT Investor Relations",
+    "metadata": {
+      "ticker": "CAT",
+      "company_name": "CAT",
+      "cnbc_url": "https://www.cnbc.com/quotes/CAT",
+      "company_website": "https://www.caterpillar.com",
+      "extraction_method": "ir_extractor_exact",
+      "timestamp": "2025-10-11T13:51:02.158001"
+    }
+  },
+  {
+    "url": "https://investor.cisco.com",
+    "type": "IR_PAGE",
+    "title": "CSCO Investor Relations",
+    "metadata": {
+      "ticker": "CSCO",
+      "company_name": "CSCO",
+      "cnbc_url": "https://www.cnbc.com/quotes/CSCO",
+      "company_website": "https://www.cisco.com/",
+      "extraction_method": "ir_extractor_exact",
+      "timestamp": "2025-10-11T13:51:02.158003"
+    }
+  },
+  {
+    "url": "https://investor.apple.com",
+    "type": "IR_PAGE",
+    "title": "AAPL Investor Relations",
+    "metadata": {
+      "ticker": "AAPL",
+      "company_name": "AAPL",
+      "cnbc_url": "https://www.cnbc.com/quotes/AAPL",
+      "company_website": "https://www.apple.com/",
+      "extraction_method": "ir_extractor_exact",
+      "timestamp": "2025-10-11T13:51:02.158004"
+    }
+  },
+  {
+    "url": "https://investor.salesforce.com",
+    "type": "IR_PAGE",
+    "title": "CRM Investor Relations",
+    "metadata": {
+      "ticker": "CRM",
+      "company_name": "CRM",
+      "cnbc_url": "https://www.cnbc.com/quotes/CRM",
+      "company_website": "https://www.salesforce.com/",
+      "extraction_method": "ir_extractor_exact",
+      "timestamp": "2025-10-11T13:51:02.158009"
+    }
+  },
+  {
+    "url": "https://investors.thewaltdisneycompany.com",
+    "type": "IR_PAGE",
+    "title": "DIS Investor Relations",
+    "metadata": {
+      "ticker": "DIS",
+      "company_name": "DIS",
+      "cnbc_url": "https://www.cnbc.com/quotes/DIS",
+      "company_website": "https://thewaltdisneycompany.com/",
+      "extraction_method": "ir_extractor_exact",
+      "timestamp": "2025-10-11T13:51:02.158025"
+    }
+  },
+  {
+    "url": "https://www.goldmansachs.com/investor-relations",
+    "type": "IR_PAGE",
+    "title": "GS Investor Relations",
+    "metadata": {
+      "ticker": "GS",
+      "company_name": "GS",
+      "cnbc_url": "https://www.cnbc.com/quotes/GS",
+      "company_website": "https://www.goldmansachs.com/",
+      "extraction_method": "ir_extractor_exact",
+      "timestamp": "2025-10-11T13:51:02.158043"
+    }
+  },
+  {
+    "url": "https://ir.homedepot.com",
+    "type": "IR_PAGE",
+    "title": "HD Investor Relations",
+    "metadata": {
+      "ticker": "HD",
+      "company_name": "HD",
+      "cnbc_url": "https://www.cnbc.com/quotes/HD",
+      "company_website": "https://www.homedepot.com/",
+      "extraction_method": "ir_extractor_exact",
+      "timestamp": "2025-10-11T13:51:02.158050"
+    }
+  },
+  {
+    "url": "http://investors.amgen.com/",
+    "type": "IR_PAGE",
+    "title": "AMGN Investor Relations",
+    "metadata": {
+      "ticker": "AMGN",
+      "company_name": "AMGN",
+      "cnbc_url": "https://www.cnbc.com/quotes/AMGN",
+      "company_website": "https://www.amgen.com/",
+      "extraction_method": "ir_extractor_exact",
+      "timestamp": "2025-10-11T13:51:02.158055"
+    }
+  },
+  {
+    "url": "https://www.amazon.com/investor-relations",
+    "type": "IR_PAGE",
+    "title": "AMZN Investor Relations",
+    "metadata": {
+      "ticker": "AMZN",
+      "company_name": "AMZN",
+      "cnbc_url": "https://www.cnbc.com/quotes/AMZN",
+      "company_website": "https://www.amazon.com/",
+      "extraction_method": "ir_extractor_exact",
+      "timestamp": "2025-10-11T13:51:02.158059"
+    }
+  },
+  {
+    "url": "https://www.microsoft.com/investors",
+    "type": "IR_PAGE",
+    "title": "MSFT Investor Relations",
+    "metadata": {
+      "ticker": "MSFT",
+      "company_name": "MSFT",
+      "cnbc_url": "https://www.cnbc.com/quotes/MSFT",
+      "company_website": "https://www.microsoft.com/en-in/",
+      "extraction_method": "ir_extractor_exact",
+      "timestamp": "2025-10-11T13:51:02.158067"
+    }
+  },
+  {
+    "url": "https://investor.nvidia.com",
+    "type": "IR_PAGE",
+    "title": "NVDA Investor Relations",
+    "metadata": {
+      "ticker": "NVDA",
+      "company_name": "NVDA",
+      "cnbc_url": "https://www.cnbc.com/quotes/NVDA",
+      "company_website": "https://www.nvidia.com/",
+      "extraction_method": "ir_extractor_exact",
+      "timestamp": "2025-10-11T13:51:02.158084"
+    }
+  },
+  {
+    "url": "https://investor.travelers.com",
+    "type": "IR_PAGE",
+    "title": "TRV Investor Relations",
+    "metadata": {
+      "ticker": "TRV",
+      "company_name": "TRV",
+      "cnbc_url": "https://www.cnbc.com/quotes/TRV",
+      "company_website": "https://www.travelers.com/",
+      "extraction_method": "ir_extractor_exact",
+      "timestamp": "2025-10-11T13:51:02.158086"
+    }
+  },
+  {
+    "url": "https://www.unitedhealthgroup.com/investor-relations",
+    "type": "IR_PAGE",
+    "title": "UNH Investor Relations",
+    "metadata": {
+      "ticker": "UNH",
+      "company_name": "UNH",
+      "cnbc_url": "https://www.cnbc.com/quotes/UNH",
+      "company_website": "https://www.unitedhealthgroup.com/",
+      "extraction_method": "ir_extractor_exact",
+      "timestamp": "2025-10-11T13:51:02.158088"
+    }
+  },
+  {
+    "url": "https://www.verizon.com/financial-services/verizon-visa-card/?origin=gnavHeader",
+    "type": "IR_PAGE",
+    "title": "VZ Investor Relations",
+    "metadata": {
+      "ticker": "VZ",
+      "company_name": "VZ",
+      "cnbc_url": "https://www.cnbc.com/quotes/VZ",
+      "company_website": "https://www.verizon.com/",
+      "extraction_method": "ir_extractor_exact",
+      "timestamp": "2025-10-11T13:51:02.158094"
+    }
+  },
+  {
+    "url": "https://corporate.walmart.com/investors",
+    "type": "IR_PAGE",
+    "title": "WMT Investor Relations",
+    "metadata": {
+      "ticker": "WMT",
+      "company_name": "WMT",
+      "cnbc_url": "https://www.cnbc.com/quotes/WMT",
+      "company_website": "https://corporate.walmart.com/",
+      "extraction_method": "ir_extractor_exact",
+      "timestamp": "2025-10-11T13:51:02.158100"
+    }
+  },
+  {
+    "url": "https://investor.visa.com",
+    "type": "IR_PAGE",
+    "title": "V Investor Relations",
+    "metadata": {
+      "ticker": "V",
+      "company_name": "V",
+      "cnbc_url": "https://www.cnbc.com/quotes/V",
+      "company_website": "https://usa.visa.com/",
+      "extraction_method": "ir_extractor_exact",
+      "timestamp": "2025-10-11T13:51:02.158101"
+    }
+  }
+]
